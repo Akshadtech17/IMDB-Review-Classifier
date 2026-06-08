@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import pickle
 import re
 import string
@@ -8,8 +7,8 @@ import nltk
 # Download required NLTK resources
 resources = {
     'corpora/stopwords': 'stopwords',
-    'tokenizers/punkt': 'punkt',
-    'corpora/wordnet': 'wordnet'
+    'corpora/wordnet': 'wordnet',
+    'corpora/omw-1.4': 'omw-1.4'
 }
 
 for path, resource in resources.items():
@@ -18,7 +17,6 @@ for path, resource in resources.items():
     except LookupError:
         nltk.download(resource, quiet=True)
 
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
@@ -27,9 +25,17 @@ stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
 
-# Text preprocessing function
 def preprocess(text):
-    # Convert to lowercase
+    """
+    Preprocess input text:
+    - Lowercase
+    - Remove URLs
+    - Remove special characters/numbers
+    - Remove stopwords
+    - Lemmatize words
+    """
+
+    # Lowercase
     text = str(text).lower()
 
     # Remove URLs
@@ -38,8 +44,8 @@ def preprocess(text):
     # Remove special characters and numbers
     text = re.sub(r'[^a-z\s]', '', text)
 
-    # Tokenization
-    tokens = word_tokenize(text)
+    # Simple tokenization (avoids punkt/punkt_tab issues)
+    tokens = text.split()
 
     # Remove stopwords and lemmatize
     clean_tokens = [
@@ -51,31 +57,31 @@ def preprocess(text):
     return " ".join(clean_tokens)
 
 
-# Page configuration
+# Streamlit page configuration
 st.set_page_config(
     page_title="IMDb Review Classifier",
     page_icon="🎬",
     layout="centered"
 )
 
-# App Title
+# Title
 st.title("🎬 IMDb Review Sentiment Classifier")
-st.markdown(
-    "Analyze movie reviews and predict whether the sentiment is **Positive 😊** or **Negative 😞**."
+st.write(
+    "Enter a movie review below and the model will predict whether the sentiment is **Positive 😊** or **Negative 😞**."
 )
 
 # Load model and vectorizer
 try:
-    with open('untuned_logistic_regression_model.pkl', 'rb') as model_file:
+    with open("untuned_logistic_regression_model.pkl", "rb") as model_file:
         model = pickle.load(model_file)
 
-    with open('vectorizer.pkl', 'rb') as vectorizer_file:
+    with open("vectorizer.pkl", "rb") as vectorizer_file:
         vectorizer = pickle.load(vectorizer_file)
 
 except FileNotFoundError:
     st.error(
         "❌ Model or vectorizer file not found.\n\n"
-        "Make sure the following files exist in your repository:\n"
+        "Ensure these files exist in your repository root:\n"
         "- untuned_logistic_regression_model.pkl\n"
         "- vectorizer.pkl"
     )
@@ -85,55 +91,56 @@ except Exception as e:
     st.error(f"❌ Error loading model: {e}")
     st.stop()
 
-
-# User Input
+# User input
 user_input = st.text_area(
-    "Enter a movie review:",
-    height=150,
-    placeholder="Example: This movie was absolutely fantastic. The acting and storyline were amazing!"
+    "Enter Movie Review:",
+    placeholder="Example: This movie was absolutely fantastic! The acting and storyline were amazing.",
+    height=180
 )
 
-# Prediction Button
+# Prediction button
 if st.button("Predict Sentiment"):
 
     if user_input.strip():
 
         try:
-            # Preprocess text
+            # Preprocess
             processed_input = preprocess(user_input)
 
-            # Transform text
+            # Vectorize
             vectorized_input = vectorizer.transform([processed_input])
 
             # Predict
             prediction = model.predict(vectorized_input)[0]
 
-            # Prediction probability (if available)
-            try:
-                probability = model.predict_proba(vectorized_input)
-                confidence = max(probability[0]) * 100
-            except:
-                confidence = None
+            # Get confidence score if available
+            confidence = None
+
+            if hasattr(model, "predict_proba"):
+                probabilities = model.predict_proba(vectorized_input)[0]
+                confidence = max(probabilities) * 100
 
             # Display result
+            st.markdown("---")
+
             if prediction == 1:
                 st.success("😊 Positive Review")
 
-                if confidence:
+                if confidence is not None:
                     st.info(f"Confidence: {confidence:.2f}%")
 
             else:
                 st.error("😞 Negative Review")
 
-                if confidence:
+                if confidence is not None:
                     st.info(f"Confidence: {confidence:.2f}%")
 
         except Exception as e:
-            st.error(f"Prediction Error: {e}")
+            st.error(f"❌ Prediction Error: {e}")
 
     else:
-        st.warning("⚠️ Please enter a review before predicting.")
+        st.warning("⚠️ Please enter a review.")
 
 # Footer
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit, NLTK, Scikit-Learn, and Machine Learning")
+st.caption("Built with Streamlit • NLTK • Scikit-Learn • Machine Learning")
